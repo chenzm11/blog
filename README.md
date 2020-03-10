@@ -23,3 +23,5 @@
 10. [[Vue源码学习] 响应式原理（中）](https://github.com/chenzm11/blog/issues/10)
 
 11. [[Vue源码学习] 响应式原理（下）](https://github.com/chenzm11/blog/issues/11)
+
+12. [[Vue源码学习] props](https://github.com/chenzm11/blog/issues/12)
