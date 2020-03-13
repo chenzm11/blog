@@ -27,3 +27,5 @@
 12. [[Vue源码学习] props](https://github.com/chenzm11/blog/issues/12)
 
 13. [[Vue源码学习] computed](https://github.com/chenzm11/blog/issues/13)
+
+14. [[Vue源码学习] watch](https://github.com/chenzm11/blog/issues/14)
