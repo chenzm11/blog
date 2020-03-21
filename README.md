@@ -29,3 +29,5 @@
 13. [[Vue源码学习] computed](https://github.com/chenzm11/blog/issues/13)
 
 14. [[Vue源码学习] watch](https://github.com/chenzm11/blog/issues/14)
+
+15. [[Vue源码学习] 插槽（上）](https://github.com/chenzm11/blog/issues/15)
