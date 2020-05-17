@@ -180,7 +180,17 @@ function patch(oldVnode, vnode, hydrating, removeOnly) {
 }
 ```
 
-可以看到，`patch`方法还是比较复杂的，因为里面包含了创建、更新、移除、服务端渲染等逻辑。在`patch`方法中，首先判断是否存在`vnode`节点，如果不存在，说明当前组件没有需要渲染的内容，同时当`oldVnode`存在时，就调用`invokeDestroyHook`方法，执行`oldVnode`的卸载逻辑，此时就已经完成了渲染的操作；如果存在`vnode`节点，就需要做创建或更新的操作了，后面的所有逻辑，其实都是为此服务的。首先定义`isInitialPatch`和`insertedVnodeQueue`变量，它们用来确保组件的`insert`钩子函数在正确的时间点执行；接下来判断是否存在`oldVnode`节点，来决定到底使用何种方式来生成真实的`DOM`，当不存在`oldVnode`节点，说明是首次执行`patch`操作，比如子组件的初次`patch`，就直接调用`createElm`方法，根据`vnode`节点创建真实的`DOM`；当存在`oldVnode`节点，首先判断`oldVnode`节点是否是一个真实`DOM`节点，如果不是真实节点，并且新旧`vnode`又是`sameVnode`，说明此新旧`vnode`是相同的节点，那么就执行`patchVnode`方法，进行对比更新，减少开销，该方法会在之后的章节中再详细介绍；如果不满足此条件，说明新旧节点不是相同节点，无法进行对比，所以需要根据`vnode`重新创建`DOM`，首先判断如果`oldVnode`是一个真实`DOM`，就先调用`emptyNodeAt`方法，将其包装成`VNode`节点，代码如下所示：
+可以看到，`patch`方法还是比较复杂的，因为里面包含了创建、更新、移除、服务端渲染等逻辑，大体上可以分为以下四种情况：
+
+1. 卸载组件：如果`vnode`节点不存在，说明当前组件没有需要渲染的内容，如果`oldVnode`存在，就调用`invokeDestroyHook`方法，执行`oldVnode`的卸载逻辑。
+
+2. 组件的首次渲染：如果`oldVnode`节点不存在，说明是组件的首次渲染，首先将`isInitialPatch`设置为`true`，然后调用`createElm`方法，根据`vnode`生成真实的`DOM`。
+
+3. 组件的对比更新：如果存在新旧节点，并且通过`sameVnode`方法检测到它们是相同的节点，那么就不用根据`vnode`生成全新的`DOM`了，而是通过对比`vnode`和`oldVnode`，根据它们之间的差异进行对比更新，减少开销。
+
+4. 创建新节点并移除旧节点：如果不满足上面的情况，就需要根据`vnode`生成真实的`DOM`，同时，如果`vnode`存在父占位符节点，那么首先需要在父占位符节点上调用所有模块的`destroy`钩子函数，卸载与旧`DOM`之间的联系，同时，如果新`DOM`是可`patchable`的，还需要在父占位符节点上调用所有模块的`create`钩子函数，构建与新`DOM`之间的联系，最后调用`removeVnodes`方法移除旧`DOM`或调用`invokeDestroyHook`方法卸载整个`oldVnode`。
+
+当调用`new Vue()`，首次调用`$mount`进行挂载时，由于`oldVnode`指向的是真实的`DOM`节点，所以会走第四种情况，这里首先调用`emptyNodeAt`方法，将`$el`其包装成`VNode`节点，代码如下所示：
 
 ```js
 /* core/vdom/patch.js */
@@ -189,56 +199,7 @@ function emptyNodeAt(elm) {
 }
 ```
 
-包装完成后，调用`createElm`方法，根据`vnode`创建真实的`DOM`，然后就是一些清理和更新的逻辑：
-
-```js
-/* core/vdom/patch.js */
-function patch(oldVnode, vnode, hydrating, removeOnly) {
-  if (isUndef(oldVnode)) {
-    // ...
-  } else {
-      // update parent placeholder node element, recursively
-      if (isDef(vnode.parent)) {
-        let ancestor = vnode.parent
-        const patchable = isPatchable(vnode)
-        while (ancestor) {
-          for (let i = 0; i < cbs.destroy.length; ++i) {
-            cbs.destroy[i](ancestor)
-          }
-          ancestor.elm = vnode.elm
-          if (patchable) {
-            for (let i = 0; i < cbs.create.length; ++i) {
-              cbs.create[i](emptyNode, ancestor)
-            }
-            // #6513
-            // invoke insert hooks that may have been merged by create hooks.
-            // e.g. for directives that uses the "inserted" hook.
-            const insert = ancestor.data.hook.insert
-            if (insert.merged) {
-              // start at index 1 to avoid re-invoking component mounted hook
-              for (let i = 1; i < insert.fns.length; i++) {
-                insert.fns[i]()
-              }
-            }
-          } else {
-            registerRef(ancestor)
-          }
-          ancestor = ancestor.parent
-        }
-      }
-
-      // destroy old node
-      if (isDef(parentElm)) {
-        removeVnodes([oldVnode], 0, 0)
-      } else if (isDef(oldVnode.tag)) {
-        invokeDestroyHook(oldVnode)
-      }
-    }
-  }
-}
-```
-
-可以看到，如果存在父占位符节点，首先需要在父占位符节点上调用所有模块的`destroy`钩子函数，卸载与旧`DOM`之间的联系，同时，如果新`DOM`是可`patchable`的，还需要在父占位符节点上调用所有模块的`create`钩子函数，构建与新`DOM`之间的联系。最后调用`removeVnodes`方法移除旧`DOM`或调用`invokeDestroyHook`方法卸载整个`oldVnode`。
+包装完成后，调用`createElm`方法，根据`vnode`创建真实的`DOM`，由于此`vnode`已经是根节点，所以这里直接调用`removeVnodes`方法，将`oldVnode`，也就是`$el`从文档中删除即可。
 
 完成以上的步骤后，此时已经根据`vnode`成功创建了`DOM`，最后调用`invokeInsertHook`方法，执行组件的`insert`钩子函数：
 
@@ -255,7 +216,39 @@ function invokeInsertHook(vnode, queue, initial) {
     }
   }
 }
+```
 
+在`invokeInsertHook`方法中，除了直接调用`insert`钩子函数外，还有另一种逻辑。我们知道，在子组件的初次渲染过程中，由于根组件可能还未渲染完成，所以不能此时调用子组件的`insert`钩子，而是要等到根组件也渲染完毕后，再进行执行，所以，当执行到子组件`patch`的最后，这里会将该子组件中使用到的子组件，添加到当前子组件的父占位符节点中，该过程结束后，程序会回到父实例中创建子组件实例的地方，其代码如下所示：
+
+```js
+/* core/vdom/patch.js */
+function createComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
+  let i = vnode.data
+  if (isDef(i)) {
+    const isReactivated = isDef(vnode.componentInstance) && i.keepAlive
+    if (isDef(i = i.hook) && isDef(i = i.init)) {
+      i(vnode, false /* hydrating */)
+    }
+    // after calling the init hook, if the vnode is a child component
+    // it should've created a child instance and mounted it. the child
+    // component also has set the placeholder vnode's elm.
+    // in that case we can just return the element and be done.
+    if (isDef(vnode.componentInstance)) {
+      initComponent(vnode, insertedVnodeQueue)
+      insert(parentElm, vnode.elm, refElm)
+      if (isTrue(isReactivated)) {
+        reactivateComponent(vnode, insertedVnodeQueue, parentElm, refElm)
+      }
+      return true
+    }
+  }
+}
+```
+
+此时，`vnode.componentInstance`中保存的就是子组件实例，然后执行`initComponent`方法，代码如下所示：
+
+```js
+/* core/vdom/patch.js */
 function initComponent(vnode, insertedVnodeQueue) {
   if (isDef(vnode.data.pendingInsert)) {
     insertedVnodeQueue.push.apply(insertedVnodeQueue, vnode.data.pendingInsert)
@@ -275,7 +268,23 @@ function initComponent(vnode, insertedVnodeQueue) {
 }
 ```
 
-可以看到，对于初次渲染的子组件来说，并不会直接调用该组件对应的`insert`钩子函数，而是将其添加到其父占位符节点的`data.pendingInsert`中，在其父实例的`initComponent`方法中，又会将刚刚的`data.pendingInsert`添加到当前的`insertedVnodeQueue`中。这是因为在`updateComponent`过程中，在执行父组件的`patch`时，会穿插着执行子组件的初始化和挂载，而此时子组件的某些钩子函数，需要等到根组件渲染后才能调用，所以子组件通过`data.pendingInsert`属性将自身添加到父组件中，最终在渲染根组件时，就可以在同一帧中完成所有组件的`insert`钩子函数。
+可以看到，在`initComponent`方法中，`vnode.data.pendingInsert`中保存的就是子组件实例内部使用的子组件，将其添加到当前环境下的`insertedVnodeQueue`中，如果子组件是可`patchable`的，就会调用`invokeCreateHooks`方法：
+
+```js
+/* core/vdom/patch.js */
+function invokeCreateHooks (vnode, insertedVnodeQueue) {
+  for (let i = 0; i < cbs.create.length; ++i) {
+    cbs.create[i](emptyNode, vnode)
+  }
+  i = vnode.data.hook // Reuse variable
+  if (isDef(i)) {
+    if (isDef(i.create)) i.create(emptyNode, vnode)
+    if (isDef(i.insert)) insertedVnodeQueue.push(vnode)
+  }
+}
+```
+
+可以看到，这里还会将当前子组件实例也添加到`insertedVnodeQueue`中。所以在整个组件树初始化的过程中，当根组件执行`invokeInsertHook`方法时，`insertedVnodeQueue`中已经保存了所有的子组件，然后就可以在同一帧中完成组件的`insert`钩子函数。
 
 ## 总结
 

@@ -178,7 +178,7 @@ export default class Watcher {
 }
 ```
 
-可以看到，在创建渲染`Watcher`的过程中，都会将该`Watcher`实例保存在组件的`_watcher`属性中，然后在该`Watcher`实例上添加一些实例属性，这里比较关键的就是将刚刚定义的`updateComponent`方法，赋值给渲染`Watcher`的`getter`属性，在创建渲染`Watcher`的最后，由于渲染`Watcher`的`lazy`为`false`，所以会直接调用`get`方法，在`get`方法中，会先后调用两个关键的方法`pushTarget`和`popTarget`，我们先来看看这两个方法的实现，其代码如下所示：
+可以看到，在创建渲染`Watcher`的过程中，会将该`Watcher`实例保存在组件的`_watcher`属性中，然后在该`Watcher`实例上初始化一些属性，这里比较关键的就是将刚刚定义的`updateComponent`方法，赋值给渲染`Watcher`的`getter`属性，在创建渲染`Watcher`的最后，由于渲染`Watcher`的`lazy`为`false`，所以会直接调用`get`方法，在`get`方法中，会先后调用两个关键的方法`pushTarget`和`popTarget`，我们先来看看这两个方法的实现，其代码如下所示：
 
 ```js
 /* core/observer/dep.js */
@@ -219,8 +219,8 @@ export function mountComponent(
 }
 ```
 
-可以看到，这里的`vm.$vnode`表示当前`Vue`实例的父占位符`VNode`，而对于根组件来说，它就是最顶层的节点，所以此时`vm.$vnode`为空，就会将`_isMounted`设置为`true`，表明当前`Vue`实例已经挂载，然后调用`mounted`钩子函数。此时，整个`$mount`方法所作的初始渲染工作就完成了，并且由于在调用渲染函数的过程中，渲染`Watcher`已经收集到了所有它需要依赖的数据，所以当这些数据发生变化时，就会触发`Watcher`的`update`操作，最终又会调用`getter`也就是`updateComponent`方法，重新做依赖收集和更新的操作，这部分内容在之后的章节中再详细介绍。
+可以看到，这里的`vm.$vnode`表示当前`Vue`实例的父占位符`VNode`，而对于根组件来说，它就是最顶层的节点，所以此时`vm.$vnode`为空，就会将`_isMounted`设置为`true`，表明当前`Vue`实例已经挂载，然后调用`mounted`钩子函数。此时，整个`$mount`方法所作的初始渲染工作就完成了，并且由于在调用渲染函数的过程中，渲染`Watcher`已经收集到了所有它需要依赖的数据，所以当这些数据发生变化时，就会触发`Watcher`的`update`操作，最终又会调用`getter`也就是`updateComponent`方法，重新做依赖收集和更新的操作。
 
 ## 总结
 
-在`Vue`中，实例的初始化和挂载是两个独立的模块，可以通过调用`$mount`方法进行挂载，在此过程中会为每个`Vue`实例创建唯一的一个渲染`Watcher`，同时将`updateComponent`方法赋值给渲染`Watcher`的`getter`属性，在创建渲染`Watcher`的过程中，会直接调用一次`getter`方法，完成依赖收集和首次挂载的逻辑，当它所依赖的数据发生变化时，`Watcher`又会重新执行`getter`方法，重新收集依赖，并执行对比更新操作。
+在`Vue`中，实例的初始化和挂载是两个独立的功能，可以通过调用`$mount`方法进行挂载，在此过程中会为每个`Vue`实例创建唯一的一个渲染`Watcher`，同时将`updateComponent`方法赋值给渲染`Watcher`的`getter`属性，在创建渲染`Watcher`的过程中，会直接调用一次`getter`方法，完成依赖收集和首次挂载的逻辑，当它所依赖的数据发生变化时，`Watcher`又会重新执行`getter`方法，重新收集依赖，并执行对比更新操作。

@@ -95,7 +95,7 @@ export function mergeOptions(
 }
 ```
 
-可以看到，在`mergeOptions`方法中，首先规范化`props`、`inject`、`directives`选项，用于支持传入多种数据格式，方便`Vue`之后的处理流程；接着检测配置中是否包含`extends`、`mixins`选项，如果存在的话，就继续调用`mergeOptions`方法，将其中包含的选项合并到`parent`中，同时从这里可以看到，`extends`和`mixins`选项的处理逻辑是相同的，`mixins`相当于包含多次`extends`；在完成了前两步的初始化工作后，接下来就开始执行真正的配置合并的逻辑，因为`Vue`支持各种不同的选项，而每种选项的使用方式也不同，所以需要对不同的选项使用不同的策略进行合并，代码如下所示：
+可以看到，在`mergeOptions`方法中，首先规范化`props`、`inject`、`directives`选项，用于支持传入多种数据格式，方便`Vue`之后的处理流程；接着检测配置中是否包含`extends`、`mixins`选项，如果存在的话，就继续调用`mergeOptions`方法，将其中包含的选项合并到`parent`中，同时从这里可以看出，`extends`和`mixins`选项的处理逻辑是相同的，`mixins`相当于包含多次`extends`；在完成了前两步的初始化工作后，接下来就开始执行真正的配置合并的逻辑，因为`Vue`支持各种不同的选项，而每种选项的使用方式也不同，所以需要对不同的选项使用不同的策略进行合并，代码如下所示：
 
 ```js
 export function mergeOptions(
@@ -156,6 +156,7 @@ LIFECYCLE_HOOKS.forEach(hook => {
 可以看到，所有生命周期的策略函数都是`mergeHook`，代码如下所示：
 
 ```js
+/* core/util/options.js */
 function mergeHook(
   parentVal: ?Array<Function>,
   childVal: ?Function | ?Array<Function>
@@ -173,7 +174,7 @@ function mergeHook(
 }
 ```
 
-`mergeHook`方法会将`parent`和`child`中的生命周期钩子函数做合并操作，返回一个新的数组，其中`parent`中的钩子函数在前，`child`中的钩子函数在后，最后使用`dedupeHooks`方法过滤掉重复的函数。从这里可以看到，生命周期钩子函数最终会合并成一个数组的形式。
+`mergeHook`方法会将`parent`和`child`中的生命周期钩子函数做合并操作，返回一个新的数组，其中`parent`中的钩子函数在前，`child`中的钩子函数在后，最后使用`dedupeHooks`方法过滤掉重复的函数。从这里可以看到，生命周期钩子函数最终会以数组的形式返回。
 
 ### component、directive、filter
 
@@ -227,17 +228,7 @@ strats.data = function (
   vm?: Component
 ): ?Function {
   if (!vm) {
-    if (childVal && typeof childVal !== 'function') {
-      process.env.NODE_ENV !== 'production' && warn(
-        'The "data" option should be a function ' +
-        'that returns a per-instance value in component ' +
-        'definitions.',
-        vm
-      )
-
-      return parentVal
-    }
-    return mergeDataOrFn(parentVal, childVal)
+    // ...
   }
 
   return mergeDataOrFn(parentVal, childVal, vm)
@@ -249,24 +240,7 @@ export function mergeDataOrFn(
   vm?: Component
 ): ?Function {
   if (!vm) {
-    // in a Vue.extend merge, both should be functions
-    if (!childVal) {
-      return parentVal
-    }
-    if (!parentVal) {
-      return childVal
-    }
-    // when parentVal & childVal are both present,
-    // we need to return a function that returns the
-    // merged result of both functions... no need to
-    // check if parentVal is a function here because
-    // it has to be a function to pass previous merges.
-    return function mergedDataFn() {
-      return mergeData(
-        typeof childVal === 'function' ? childVal.call(this, this) : childVal,
-        typeof parentVal === 'function' ? parentVal.call(this, this) : parentVal
-      )
-    }
+    // ...
   } else {
     return function mergedInstanceDataFn() {
       // instance merge
@@ -286,7 +260,7 @@ export function mergeDataOrFn(
 }
 ```
 
-可以看到，对于非组件的配置合并，此时的`vm`表示当前`Vue`实例，所以直接调用`mergeDataOrFn`方法，并返回一个新的函数`mergedInstanceDataFn`，这个函数会在`initState`的过程中执行。执行时，首先从`parent`和`child`中取到各自的数据，然后调用`mergeData`方法合并这两项数据，其代码如下所示：
+可以看到，对于非组件的配置合并，此时的`vm`表示当前`Vue`实例，所以直接调用`mergeDataOrFn`方法，然后返回一个新的函数`mergedInstanceDataFn`，这个函数会在`initState`的过程中执行。执行时，首先从`parent`和`child`中取到各自的数据，然后调用`mergeData`方法合并这两项数据，其代码如下所示：
 
 ```js
 /* core/util/options.js */
@@ -446,7 +420,7 @@ Vue.extend = function (extendOptions: Object): Function {
 }
 ```
 
-可以看到，`extend`静态方法首先会检查在缓存中是否存在对应的子构造器，如果存在就直接返回，如果不存在，就先创建了一个子构造器`Sub`，然后使用原型继承的方式继承`Super`，在这里也就是`Vue`构造函数。接着调用`mergeOptions`方法，将`Super.options`和我们定义的组件配置选项进行合并，将合并后的结果添加到`Sub.options`属性上，也就是子构造器的`options`选项，合并完成后，处理选项中的`props`、`computed`选项，将它们定义到子构造器的原型上，避免在实例化时，在子实例上多次定义重复逻辑，具体内容在数据响应化部分再详细介绍。然后将`Super`上的静态方法添加到`Sub`上，比如`extend`、`mixin`、`use`、`component`、`directive`、`filter`等，此时，`Sub`构造器就拥有了`Super`构造器的能力，同时将`Sub`自己添加到`Sub.options.components`对象中，这样在组件模板中就可以递归调用自己。最后将构造出的子构造器`Sub`缓存到组件配置对象中，避免重复创建该子构造器。
+可以看到，`extend`静态方法首先会检查在缓存中是否存在对应的子构造器，如果存在就直接返回，如果不存在，就先创建了一个子构造器`Sub`，然后使用原型继承的方式继承`Super`，在这里也就是`Vue`构造函数。接着调用`mergeOptions`方法，将`Super.options`和我们定义的组件配置选项进行合并，将合并后的结果添加到`Sub.options`属性上，也就是子构造器的`options`选项，合并完成后，处理选项中的`props`、`computed`选项，将它们定义到子构造器的原型上，避免在实例化时，在子实例上多次定义重复的逻辑，具体内容在数据响应化部分再详细介绍。然后将`Super`上的静态方法添加到`Sub`上，比如`extend`、`mixin`、`use`、`component`、`directive`、`filter`等，此时，`Sub`构造器就拥有了`Super`构造器的能力，同时将`Sub`自己添加到`Sub.options.components`对象中，这样在组件模板中就可以递归调用自己。最后将构造出的子构造器`Sub`缓存到组件配置对象中，避免重复创建该子构造器。
 
 通过`Vue.extend`创建完子构造器后，此时还没有创建子组件实例，直到当父组件执行`patch`，准备挂载父占位符节点时，才会调用组件的`init`钩子函数，在此方法中又会调用`createComponentInstanceForVnode`方法，这个方法就是创建子组件实例的真正方法，其代码如下所示：
 
@@ -509,7 +483,7 @@ export function initInternalComponent(vm: Component, options: InternalComponentO
 }
 ```
 
-可以看到，在`initInternalComponent`方法中，首先创建一个继承自`Sub.options`的实例，然后将各种与当前`vm`实例相关`propsData`、`listeners`、`children`等属性添加到该实例上，这样一来，组件构造器上的配置就可以重复使用，避免因创建多个组件实例，调用`mergeOptions`方法而导致的性能损失。
+在`initInternalComponent`方法中，首先创建一个继承自`Sub.options`的实例，然后将各种与当前组件实例相关的`propsData`、`listeners`、`children`等属性添加到该实例上，这样一来，组件构造器上的配置就可以重复使用，避免因创建多个组件实例，调用`mergeOptions`方法而导致的性能损失。
 
 ## resolveConstructorOptions
 
@@ -540,19 +514,6 @@ export function resolveConstructorOptions(Ctor: Class<Component>) {
   }
   return options
 }
-
-function resolveModifiedOptions(Ctor: Class<Component>): ?Object {
-  let modified
-  const latest = Ctor.options
-  const sealed = Ctor.sealedOptions
-  for (const key in latest) {
-    if (latest[key] !== sealed[key]) {
-      if (!modified) modified = {}
-      modified[key] = latest[key]
-    }
-  }
-  return modified
-}
 ```
 
 可以看到，在上面的代码中，使用到了`super`、`superOptions`、`extendOptions`、`sealedOptions`这些属性，它们是在`Vue.extend`中设置的：
@@ -568,8 +529,8 @@ Vue.extend = function (extendOptions: Object): Function {
 }
 ```
 
-如上所示，`super`表示父构造器，`superOptions`表示父构造器的配置对象，`extendOptions`表示组件的配置对象，`sealedOptions`表示合并后的配置对象的拷贝，所以在`resolveConstructorOptions`方法中，如果检测到组件上的`superOptions`与父构造器的`options`不相等，则说明在创建完子构造器后，父构造器的配置选项进行过更新，就需要通过`resolveModifiedOptions`方法，找到新旧父`options`之间的区别后，再重新使用`mergeOptions`方法构造新的子`options`，所以使用`resolveConstructorOptions`方法就可以保证在创建实例时，构造器上的配置`options`是最新的了。
+如上所示，`super`表示父构造器，`superOptions`表示父构造器的配置对象，`extendOptions`表示组件的配置对象，`sealedOptions`表示合并后的配置对象的拷贝，所以在`resolveConstructorOptions`方法中，如果检测到组件上的`superOptions`与父构造器的`options`不相等，则说明在创建完子构造器后，父构造器的配置选项进行过更新，所以需要调用`mergeOptions`方法，重新构造子构造器上的`options`选项，所以在创建实例之前，通过调用`resolveConstructorOptions`方法，就可以保证在创建实例时，构造器上的`options`选项是最新的了。
 
 ## 总结
 
-在`Vue`中，每个实例的`$options`不仅仅来自于我们编写的配置，它还会将组件构造器上的配置，通过不同的策略函数，进行合并，从而得到最终的配置，同时对于非组件的配置合并和组件的配置合并来说，它们的处理流程是不相同的，对于组件的配置合并来说，它只会执行一次`mergeOptions`操作，每个组件自己的数据都会在构建组件占位符节点时，进行构建，然后在实例化组件时传入。
+在`Vue`中，每个实例的`$options`不仅仅来自于我们编写的配置，它还会将组件构造器上的配置，通过不同的策略函数，进行合并，从而得到最终的配置，同时对于非组件的配置合并和组件的配置合并来说，它们的处理流程是不相同的，对于组件的配置合并来说，它只会在构建组件构造器时，执行一次`mergeOptions`操作，每个组件自己的数据都会在构建组件的父占位符节点时，在`Vue`内部进行创建，然后在实例化组件时传入。
