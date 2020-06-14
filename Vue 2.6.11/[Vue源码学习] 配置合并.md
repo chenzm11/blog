@@ -2,36 +2,33 @@
 
 ## 前言
 
-从上一章节中，我们知道，在调用`_init`方法初始化`Vue`实例的过程中，首先会进行配置合并的操作：
+从上一章节中我们知道，在调用`_init`方法初始化`Vue`实例的过程中，首先会进行配置合并的操作：
 
 ```js
 /* core/instance/init.js */
 Vue.prototype._init = function (options?: Object) {
-  // ...
-
-  // merge options
   if (options && options._isComponent) {
+    // 组件的配置合并
     // optimize internal component instantiation
     // since dynamic options merging is pretty slow, and none of the
     // internal component options needs special treatment.
     initInternalComponent(vm, options)
   } else {
+    // 非组件的配置合并
     vm.$options = mergeOptions(
       resolveConstructorOptions(vm.constructor),
       options || {},
       vm
     )
   }
-
-  // ...
 }
 ```
 
-如上所示，`Vue`会根据不同的条件，进行非组件的配置合并和组件的配置合并，那么接下来，就看看它们内部是如何合并配置的。
+可以看到，`Vue`会根据不同的条件，进行非组件的配置合并和组件的配置合并，那么接下来，我们就分别看看它们内部是如何实现的。
 
 ## 非组件的配置合并
 
-当直接使用`new Ctor()`的方式创建实例时，会调用`mergeOptions`方法，进行非组件的配置合并，代码如下所示：
+当直接使用`new Ctor()`的方式创建实例时，就会调用`mergeOptions`方法，进行非组件的配置合并，代码如下所示：
 
 ```js
 vm.$options = mergeOptions(
@@ -41,7 +38,7 @@ vm.$options = mergeOptions(
 )
 ```
 
-可以看到，`mergeOptions`方法接收三个参数，其中第一个参数是调用`resolveConstructorOptions`方法返回的，其内部逻辑下面会介绍，这里可以简单看成返回`Ctor.options`，所以`mergeOptions`方法接收`Ctor`构造器上预定义的配置和传入的选项`options`，那么接下来，来看看`mergeOptions`方法的逻辑，代码如下所示：
+可以看到，`mergeOptions`方法接收三个参数，其中第一个参数是调用`resolveConstructorOptions`方法返回的，其内部逻辑之后会单独介绍，这里可以简单的看成返回`Ctor.options`，那么接下来，我们就来看看`mergeOptions`方法的实现：
 
 ```js
 /* core/util/options.js */
@@ -58,14 +55,12 @@ export function mergeOptions(
     child = child.options
   }
 
+  // 1. 规范化props、inject、directives选项
   normalizeProps(child, vm)
   normalizeInject(child, vm)
   normalizeDirectives(child)
 
-  // Apply extends and mixins on the child options,
-  // but only if it is a raw options object that isn't
-  // the result of another mergeOptions call.
-  // Only merged options has the _base property.
+  // 2. 将extends、mixins选项中的配置合并到parent中
   if (!child._base) {
     if (child.extends) {
       parent = mergeOptions(parent, child.extends, vm)
@@ -77,6 +72,7 @@ export function mergeOptions(
     }
   }
 
+  // 3. 根据策略函数处理选项
   const options = {}
   let key
   for (key in parent) {
@@ -95,40 +91,11 @@ export function mergeOptions(
 }
 ```
 
-可以看到，在`mergeOptions`方法中，首先规范化`props`、`inject`、`directives`选项，用于支持传入多种数据格式，方便`Vue`之后的处理流程；接着检测配置中是否包含`extends`、`mixins`选项，如果存在的话，就继续调用`mergeOptions`方法，将其中包含的选项合并到`parent`中，同时从这里可以看出，`extends`和`mixins`选项的处理逻辑是相同的，`mixins`相当于包含多次`extends`；在完成了前两步的初始化工作后，接下来就开始执行真正的配置合并的逻辑，因为`Vue`支持各种不同的选项，而每种选项的使用方式也不同，所以需要对不同的选项使用不同的策略进行合并，代码如下所示：
+可以看到，在`mergeOptions`方法中，首先调用`normalize`方法规范化`props`、`inject`、`directives`选项，将用户传入的数据处理成规范的格式；然后递归地调用`mergeOptions`方法，将`extends`、`mixins`选项中的配置合并到`parent`中，相当于对组件做了扩展，同时从这里可以看出，`extends`和`mixins`选项的处理逻辑是相同的，`mixins`相当于包含多次`extends`；在完成了前两步的初始化工作后，接下来就开始执行真正的配置合并的逻辑。
 
-```js
-export function mergeOptions(
-  parent: Object,
-  child: Object,
-  vm?: Component
-): Object {
-  // ...
-
-  const options = {}
-  let key
-  for (key in parent) {
-    mergeField(key)
-  }
-  for (key in child) {
-    if (!hasOwn(parent, key)) {
-      mergeField(key)
-    }
-  }
-  function mergeField(key) {
-    const strat = strats[key] || defaultStrat
-    options[key] = strat(parent[key], child[key], vm, key)
-  }
-
-  // ...
-}
-```
-
-可以看到，通过遍历传入的配置对象，获取到对应的选项后，再从`strats`对象上取出对应的合并策略函数，最后将`parent`上的配置和`child`上的配置通过策略函数进行合并，最终就可以得到合并后的值了。接下来就看看常见的选项是如何进行合并的。
+首先遍历传入的配置对象，根据不同的选项从`strats`中取出对应的合并策略函数，然后将`parent`上的配置和`child`上的配置通过策略函数进行合并，最后就可以得到此选项合并后的结果了。接下来就来看看常见的选项是如何进行合并的。
 
 ### lifecycle
-
-`lifecycle`生命周期的合并策略，代码如下所示：
 
 ```js
 /* shared/constants.js */
@@ -153,7 +120,7 @@ LIFECYCLE_HOOKS.forEach(hook => {
 })
 ```
 
-可以看到，所有生命周期的策略函数都是`mergeHook`，代码如下所示：
+可以看到，所有生命周期的策略函数都是`mergeHook`，其代码如下所示：
 
 ```js
 /* core/util/options.js */
@@ -172,13 +139,21 @@ function mergeHook(
     ? dedupeHooks(res)
     : res
 }
+
+function dedupeHooks(hooks) {
+  const res = []
+  for (let i = 0; i < hooks.length; i++) {
+    if (res.indexOf(hooks[i]) === -1) {
+      res.push(hooks[i])
+    }
+  }
+  return res
+}
 ```
 
-`mergeHook`方法会将`parent`和`child`中的生命周期钩子函数做合并操作，返回一个新的数组，其中`parent`中的钩子函数在前，`child`中的钩子函数在后，最后使用`dedupeHooks`方法过滤掉重复的函数。从这里可以看到，生命周期钩子函数最终会以数组的形式返回。
+`mergeHook`会将`parent`和`child`中的生命周期钩子函数做合并操作，返回一个新的数组，其中`parent`中的钩子函数在前，`child`中的钩子函数在后，最后使用`dedupeHooks`方法过滤掉重复的钩子函数。
 
-### component、directive、filter
-
-资源相关的合并策略，代码如下所示：
+### components、directives、filters
 
 ```js
 /* shared/constants.js */
@@ -194,7 +169,7 @@ ASSET_TYPES.forEach(function (type) {
 })
 ```
 
-可以看到，`component`、`directive`、`filter`的策略函数都是`mergeAssets`，代码如下所示：
+可以看到，`components`、`directives`、`filters`选项的策略函数都是`mergeAssets`，其代码如下所示：
 
 ```js
 /* core/util/options.js */
@@ -214,11 +189,9 @@ function mergeAssets(
 }
 ```
 
-`mergeAssets`方法首先会以`parentVal`为原型创建一个新的实例，然后把`childVal`合并到这个新实例上。之所以该合并策略使用原型继承的方式，是因为`component`、`directive`、`filter`这些资源相关的选项，在多个实例之间是可以复用的，这样就不用把`parentVal`添加到各个实例上了。
+`mergeAssets`首先会以`parentVal`为原型创建一个新的实例，然后把`childVal`合并到这个实例上，之所以使用原型继承的方式，是因为`components`、`directives`、`filters`这些资源相关的选项，在多个实例之间是可以复用的，这样就不用把这些数据单独的添加到各个实例上了。
 
 ### data、provide
-
-`data`选项的合并策略，代码如下所示：
 
 ```js
 /* core/util/options.js */
@@ -227,40 +200,36 @@ strats.data = function (
   childVal: any,
   vm?: Component
 ): ?Function {
-  if (!vm) {
-    // ...
-  }
-
+  // ...
   return mergeDataOrFn(parentVal, childVal, vm)
 }
+
+strats.provide = mergeDataOrFn
 
 export function mergeDataOrFn(
   parentVal: any,
   childVal: any,
   vm?: Component
 ): ?Function {
-  if (!vm) {
-    // ...
-  } else {
-    return function mergedInstanceDataFn() {
-      // instance merge
-      const instanceData = typeof childVal === 'function'
-        ? childVal.call(vm, vm)
-        : childVal
-      const defaultData = typeof parentVal === 'function'
-        ? parentVal.call(vm, vm)
-        : parentVal
-      if (instanceData) {
-        return mergeData(instanceData, defaultData)
-      } else {
-        return defaultData
-      }
+  // ...
+  return function mergedInstanceDataFn() {
+    // instance merge
+    const instanceData = typeof childVal === 'function'
+      ? childVal.call(vm, vm)
+      : childVal
+    const defaultData = typeof parentVal === 'function'
+      ? parentVal.call(vm, vm)
+      : parentVal
+    if (instanceData) {
+      return mergeData(instanceData, defaultData)
+    } else {
+      return defaultData
     }
   }
 }
 ```
 
-可以看到，对于非组件的配置合并，此时的`vm`表示当前`Vue`实例，所以直接调用`mergeDataOrFn`方法，然后返回一个新的函数`mergedInstanceDataFn`，这个函数会在`initState`的过程中执行。执行时，首先从`parent`和`child`中取到各自的数据，然后调用`mergeData`方法合并这两项数据，其代码如下所示：
+可以看到，对于非组件的配置合并，该策略函数会返回一个新的函数`mergedInstanceDataFn`，它会在`initState`的过程中执行。执行时，首先从`parent`和`child`中取到各自的数据，然后调用`mergeData`方法合并这两项数据：
 
 ```js
 /* core/util/options.js */
@@ -279,12 +248,14 @@ function mergeData(to: Object, from: ?Object): Object {
     toVal = to[key]
     fromVal = from[key]
     if (!hasOwn(to, key)) {
+      // 对于to中不存在的数据，从from中取出后添加到to中
       set(to, key, fromVal)
     } else if (
       toVal !== fromVal &&
       isPlainObject(toVal) &&
       isPlainObject(fromVal)
     ) {
+      // 值是对象，需要递归处理
       mergeData(toVal, fromVal)
     }
   }
@@ -292,20 +263,9 @@ function mergeData(to: Object, from: ?Object): Object {
 }
 ```
 
-可以看到，`mergeData`方法就是一个深度合并的过程，主要是用来将`from`中的数据合并到`to`中，所以首先遍历`from`对象，如果`to`中不存在该属性，就将数据直接添加到`to`中；如果`to`中存在该属性，并且对应的值还是一个对象，就继续调用`mergeData`方法，深度递归该对象，如果对应的值是一个基础类型，那么就不做任何操作，还是以`to`中的值为准，最终可以得到一个以`to`为主的对象，这样就可以把`child`和`parent`中的数据合并起来了。
-
-`provide`选项的合并策略同样使用`mergeDataOrFn`方法，代码如下所示：
-
-```js
-/* core/util/options.js */
-strats.provide = mergeDataOrFn
-```
-
-所以最终的处理结果和`data`类似，也是一个深度合并的结果。
+可以看到，`mergeData`就是一个深度合并的过程，主要是用来将`from`中的数据合并到`to`中，所以首先遍历`from`对象，如果`to`中不存在该数据，就将数据直接添加到`to`中；如果`to`中存在该数据，并且它们对应的值还是一个对象，就继续调用`mergeData`，对数据进行深度递归，否则，就不做任何操作，还是以`to`中的数据为准，最终可以得到一个以`to`为主的对象，这样就可以把`child`和`parent`中的数据合并起来了。
 
 ### props、methdos、inject、computed
-
-`props`、`methdos`、`inject`、`computed`的合并策略，代码如下所示：
 
 ```js
 /* core/util/options.js */
@@ -333,7 +293,7 @@ strats.computed = function (
 
 ### 默认策略
 
-对于没有指定策略函数的选项来说，就使用默认策略，代码如下所示：
+对于没有策略函数的选项来说，就会使用默认策略，代码如下所示：
 
 ```js
 /* core/util/options.js */
@@ -344,7 +304,7 @@ const defaultStrat = function (parentVal: any, childVal: any): any {
 }
 ```
 
-可以看到，默认策略就是如果在`child`中定义了选项，就直接取`child`中定义的值，否则，就取`parent`中定义的值。
+默认策略就是在`child`中定义了选项，就直接取`child`中的值，否则，就取`parent`中的值。
 
 在各种选项经过对应的策略函数处理后，将最终的合并结果赋值给`vm.$options`，这样就完成了非组件的配置合并。
 
@@ -352,7 +312,7 @@ const defaultStrat = function (parentVal: any, childVal: any): any {
 
 ## 组件的配置合并
 
-其实对于组件来说，配置合并首先会发生在创建组件`VNode`的过程中，在此过程中会调用`Vue.extend`方法，将我们定义的组件配置转换成组件构造器，其代码如下所示：
+一般来说，组件的配置合并首先会发生在创建组件`VNode`的过程中，在调用`createComponent`方法时，会调用`Vue.extend`方法，将组件配置对象转换成组件构造器，其代码如下所示：
 
 ```js
 /* core/global-api/extend.js */
@@ -361,6 +321,7 @@ Vue.extend = function (extendOptions: Object): Function {
   const Super = this
   const SuperId = Super.cid
   const cachedCtors = extendOptions._Ctor || (extendOptions._Ctor = {})
+  // 首先尝试从缓存中获取组件构造器
   if (cachedCtors[SuperId]) {
     return cachedCtors[SuperId]
   }
@@ -370,12 +331,15 @@ Vue.extend = function (extendOptions: Object): Function {
     validateComponentName(name)
   }
 
+  // 定义组件构造器
   const Sub = function VueComponent(options) {
     this._init(options)
   }
   Sub.prototype = Object.create(Super.prototype)
   Sub.prototype.constructor = Sub
   Sub.cid = cid++
+
+  // 配置合并
   Sub.options = mergeOptions(
     Super.options,
     extendOptions
@@ -420,9 +384,9 @@ Vue.extend = function (extendOptions: Object): Function {
 }
 ```
 
-可以看到，`extend`静态方法首先会检查在缓存中是否存在对应的子构造器，如果存在就直接返回，如果不存在，就先创建了一个子构造器`Sub`，然后使用原型继承的方式继承`Super`，在这里也就是`Vue`构造函数。接着调用`mergeOptions`方法，将`Super.options`和我们定义的组件配置选项进行合并，将合并后的结果添加到`Sub.options`属性上，也就是子构造器的`options`选项，合并完成后，处理选项中的`props`、`computed`选项，将它们定义到子构造器的原型上，避免在实例化时，在子实例上多次定义重复的逻辑，具体内容在数据响应化部分再详细介绍。然后将`Super`上的静态方法添加到`Sub`上，比如`extend`、`mixin`、`use`、`component`、`directive`、`filter`等，此时，`Sub`构造器就拥有了`Super`构造器的能力，同时将`Sub`自己添加到`Sub.options.components`对象中，这样在组件模板中就可以递归调用自己。最后将构造出的子构造器`Sub`缓存到组件配置对象中，避免重复创建该子构造器。
+可以看到，`extend`方法首先会检查缓存中是否存在对应的子构造器，如果存在就直接返回，如果不存在，就先创建了一个子构造器`Sub`，然后使用原型继承的方式使`Sub`继承`Super`，接着调用`mergeOptions`方法，将`Super.options`和组件配置进行合并，然后将合并后的结果添加到`Sub.options`中，合并完成后，将`Super`上的静态方法添加到`Sub`上，比如`extend`、`mixin`、`use`、`component`、`directive`、`filter`等，此时，`Sub`构造器就拥有了类似`Super`构造器的能力，然后将`Sub`自己添加到`Sub.options.components`中，这样在组件中就可以递归调用自己。最后将构造出的子构造器`Sub`缓存到组件配置对象中，下一次就可以直接从缓存中取出子构造器，而不用重新构建了。
 
-通过`Vue.extend`创建完子构造器后，此时还没有创建子组件实例，直到当父组件执行`patch`，准备挂载父占位符节点时，才会调用组件的`init`钩子函数，在此方法中又会调用`createComponentInstanceForVnode`方法，这个方法就是创建子组件实例的真正方法，其代码如下所示：
+通过`Vue.extend`创建完子构造器后，此时还没有创建子组件的实例，当父组件执行`patch`，准备挂载组件的父占位符节点时，会调用`createComponentInstanceForVnode`方法创建子组件的实例，代码如下所示：
 
 ```js
 /* core/vdom/create-component.js */
@@ -432,8 +396,8 @@ export function createComponentInstanceForVnode(
 ): Component {
   const options: InternalComponentOptions = {
     _isComponent: true,
-    _parentVnode: vnode,
-    parent
+    _parentVnode: vnode, // 父占位符节点
+    parent // 父vm实例
   }
   // check inline-template render functions
   const inlineTemplate = vnode.data.inlineTemplate
@@ -445,21 +409,19 @@ export function createComponentInstanceForVnode(
 }
 ```
 
-可以看到，在`createComponentInstanceForVnode`方法中，首先构建组件配置选项`options`，其中`_isComponent`属性表示当前是组件的配置合并操作，其余的两个`_parentVnode`和`parent`属性分别表示组件的父占位符节点和组件的父`Vue`实例，然后通过`vnode.componentOptions.Ctor`构造函数，也就是上面的`Sub`构造器，创建子组件的实例，最终还是调用上一章节中的`_init`方法，只是这次传入的选项`options`是`Vue`内部构造的，我们在`.vue`文件中定义的组件配置选项，已经在构造`Sub`构造器时合并到`Sub.options`上了，接下来，来看看对于组件的配置合并，`_init`方法是如何工作的，代码如下所示：
+可以看到，在`createComponentInstanceForVnode`方法中，首先会构建组件的配置选项，`_isComponent`表示当前是组件的配置合并，其余的`_parentVnode`和`parent`分别表示组件的父占位符节点和父`vm`实例，然后通过`vnode.componentOptions.Ctor`，也就是上面的`Sub`构造器，创建子组件的实例，最终还是调用`_init`方法，只是这次传入的选项是`Vue`内部构造的，接下来，我们来看看对于组件的配置合并，`_init`内部是如何工作的：
 
 ```js
 /* core/instance/init.js */
-Vue.prototype._init = function (options?: Object) {
-  if (options && options._isComponent) {
-    // optimize internal component instantiation
-    // since dynamic options merging is pretty slow, and none of the
-    // internal component options needs special treatment.
-    initInternalComponent(vm, options)
-  }
+if (options && options._isComponent) {
+  // optimize internal component instantiation
+  // since dynamic options merging is pretty slow, and none of the
+  // internal component options needs special treatment.
+  initInternalComponent(vm, options)
 }
 ```
 
-可以看到，创建子组件实例时，会调用`initInternalComponent`方法进行配置合并，其代码如下所示：
+可以看到，对于组件来说，会调用`initInternalComponent`方法进行配置合并，代码如下所示：
 
 ```js
 /* core/instance/init.js */
@@ -483,11 +445,11 @@ export function initInternalComponent(vm: Component, options: InternalComponentO
 }
 ```
 
-在`initInternalComponent`方法中，首先创建一个继承自`Sub.options`的实例，然后将各种与当前组件实例相关的`propsData`、`listeners`、`children`等属性添加到该实例上，这样一来，组件构造器上的配置就可以重复使用，避免因创建多个组件实例，调用`mergeOptions`方法而导致的性能损失。
+在`initInternalComponent`方法中，首先以`Sub.options`为原型创建一个实例，然后将各种与当前实例相关的`propsData`、`listeners`、`children`等属性添加到该实例上，可以看到，由于此时没有做`mergeOptions`操作，所以组件的配置合并速度是很快的。
 
 ## resolveConstructorOptions
 
-在前两的两小节中，我们已经知道`Vue`是如何合并配置的了，其实在它们的内部，都会执行`resolveConstructorOptions`方法，用来检查构造器上的`options`选项是否是最新值，其代码如下所示：
+在前两的两小节中，我们已经知道`Vue`是如何合并配置的了，其实在它们的内部，都会执行`resolveConstructorOptions`方法，用来检查构造器上的`options`是否需要更新，代码如下所示：
 
 ```js
 /* core/instance/init.js */
@@ -496,6 +458,7 @@ export function resolveConstructorOptions(Ctor: Class<Component>) {
   if (Ctor.super) {
     const superOptions = resolveConstructorOptions(Ctor.super)
     const cachedSuperOptions = Ctor.superOptions
+    // 缓存的配置和实际的配置不同时，需要重新做mergeOptions操作
     if (superOptions !== cachedSuperOptions) {
       // super option changed,
       // need to resolve new options.
@@ -516,21 +479,8 @@ export function resolveConstructorOptions(Ctor: Class<Component>) {
 }
 ```
 
-可以看到，在上面的代码中，使用到了`super`、`superOptions`、`extendOptions`、`sealedOptions`这些属性，它们是在`Vue.extend`中设置的：
-
-```js
-/* core/global-api/extend.js */
-Vue.extend = function (extendOptions: Object): Function {
-  Sub['super'] = Super
-
-  Sub.superOptions = Super.options
-  Sub.extendOptions = extendOptions
-  Sub.sealedOptions = extend({}, Sub.options)
-}
-```
-
-如上所示，`super`表示父构造器，`superOptions`表示父构造器的配置对象，`extendOptions`表示组件的配置对象，`sealedOptions`表示合并后的配置对象的拷贝，所以在`resolveConstructorOptions`方法中，如果检测到组件上的`superOptions`与父构造器的`options`不相等，则说明在创建完子构造器后，父构造器的配置选项进行过更新，所以需要调用`mergeOptions`方法，重新构造子构造器上的`options`选项，所以在创建实例之前，通过调用`resolveConstructorOptions`方法，就可以保证在创建实例时，构造器上的`options`选项是最新的了。
+在`resolveConstructorOptions`方法中，如果检测到子构造器中的`superOptions`与父构造器的`options`不相同，则说明在创建完子构造器后，父构造器的配置选项进行过更新，所以需要调用`mergeOptions`方法，重新生成子构造器上的`options`选项，所以在创建实例之前，通过调用`resolveConstructorOptions`方法，就可以保证在创建实例时，构造器上的`options`选项是最新的了。
 
 ## 总结
 
-在`Vue`中，每个实例的`$options`不仅仅来自于我们编写的配置，它还会将组件构造器上的配置，通过不同的策略函数，进行合并，从而得到最终的配置，同时对于非组件的配置合并和组件的配置合并来说，它们的处理流程是不相同的，对于组件的配置合并来说，它只会在构建组件构造器时，执行一次`mergeOptions`操作，每个组件自己的数据都会在构建组件的父占位符节点时，在`Vue`内部进行创建，然后在实例化组件时传入。
+在`Vue`中，每个实例的`$options`不仅仅来自于我们编写的配置，它还会将组件构造器上的配置，通过不同的策略函数，进行合并，同时，在创建子组件实例时，还会将父占位符中的部分数据进行合并，从而得到最终的配置。

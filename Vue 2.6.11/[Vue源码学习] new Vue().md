@@ -2,11 +2,19 @@
 
 ## 前言
 
-通常我们会使用`new Vue(options)`的方式来初始化`Vue`实例，那么接下来就来看看在`new Vue()`的过程中，`Vue`内部都做了哪些工作。首先来看看`Vue`构造函数是如何定义的。
+在使用`Vue`编写应用程序时，都是通过用`Vue`构造函数创建一个新的`Vue`实例开始的：
+
+```js
+new Vue({
+  // options
+})
+```
+
+那么接下来，我们就来看看从入口开始，`Vue`内部做了哪些工作。
 
 ## Vue构造函数
 
-`Vue`构造函数的代码如下所示：
+我们首先来看看`Vue`构造函数的定义，其代码如下所示：
 
 ```js
 /* core/instance/index.js */
@@ -20,7 +28,7 @@ function Vue(options) {
 }
 ```
 
-可以看到，当使用`new`运算符新建`Vue`实例时，其内部就是调用`_init`方法，同时将用户定义的选项`options`传入。接下来就来看看`_init`方法是如何定义的，其代码如下所示：
+可以看到，当使用`new`运算符新建`Vue`实例时，其内部就是调用`_init`方法，其代码如下所示：
 
 ```js
 /* core/instance/init.js */
@@ -29,11 +37,10 @@ Vue.prototype._init = function (options?: Object) {
   // a uid
   vm._uid = uid++
 
-  // ...
-
   // a flag to avoid this being observed
   vm._isVue = true
-  // merge options
+
+  // 1. 配置合并
   if (options && options._isComponent) {
     // optimize internal component instantiation
     // since dynamic options merging is pretty slow, and none of the
@@ -54,6 +61,8 @@ Vue.prototype._init = function (options?: Object) {
   }
   // expose real self
   vm._self = vm
+
+  // 2. 初始化vm实例
   initLifecycle(vm)
   initEvents(vm)
   initRender(vm)
@@ -63,15 +72,14 @@ Vue.prototype._init = function (options?: Object) {
   initProvide(vm) // resolve provide after data/props
   callHook(vm, 'created')
 
-  // ...
-
+  // 3. 挂载根节点
   if (vm.$options.el) {
     vm.$mount(vm.$options.el)
   }
 }
 ```
 
-可以看到，在`_init`方法中，除了在当前实例上添加一些属性外，`Vue`主要做了三件事情：
+可以看到，在`_init`方法中，`Vue`主要做了三件事情：
 
 1. 配置合并
 
@@ -90,9 +98,9 @@ Vue.prototype._init = function (options?: Object) {
     }
     ```
 
-    如上所示，`Vue`会根据不同的调用方式，分别执行`initInternalComponent`和`mergeOptions`方法，不管调用哪一种方法，都是将传入的选项`options`和`Ctor.options`做合并操作，最终将合并后的结果存储在`vm.$options`上，具体的合并细节会在之后的章节中详细介绍。
+    配置合并可以分为组件和非组件两种形式，`Vue`会根据这两种情况，分别调用`initInternalComponent`和`mergeOptions`方法，不管调用哪一种方法，其作用都是将传入的`options`和`Ctor.options`做合并操作，然后将合并后的结果保存在`vm.$options`中。
 
-2. 执行多个`init`方法，进一步初始化`Vue`实例
+2. 初始化vm实例
 
     ```js
     initLifecycle(vm)
@@ -105,7 +113,7 @@ Vue.prototype._init = function (options?: Object) {
     callHook(vm, 'created')
     ```
 
-    如上所示，`Vue`会调用多个`init`方法，并且在不同的阶段，还执行了`beforeCreate`、`created`生命周期钩子。那么接下来，就来简单的看下各个方法都做了哪些初始化工作。
+    在创建实例时，`Vue`会调用多个`init`方法，每个方法都会在实例上初始化一些数据。那么接下来，我们就简单看下各个方法都做了哪些初始化工作。
 
     * initLifecycle
 
@@ -114,7 +122,7 @@ Vue.prototype._init = function (options?: Object) {
       export function initLifecycle(vm: Component) {
         const options = vm.$options
 
-        // locate first non-abstract parent
+        // 将子实例添加到父实例的$children中
         let parent = options.parent
         if (parent && !options.abstract) {
           while (parent.$options.abstract && parent.$parent) {
@@ -123,6 +131,7 @@ Vue.prototype._init = function (options?: Object) {
           parent.$children.push(vm)
         }
 
+        // 保存对父实例的引用
         vm.$parent = parent
         vm.$root = parent ? parent.$root : vm
 
@@ -138,7 +147,7 @@ Vue.prototype._init = function (options?: Object) {
       }
       ```
 
-      如上所示，`initLifecycle`方法主要就是在当前实例上添加一些属性，并且通过`$parent`和`$children`建立组件之间的父子关系。这里的`$options.parent`是在合并配置时赋值的，表示当前实例的父`Vue`实例，对于非抽象组件来说，它会通过`while`循环，找到第一个非抽象组件的父实例，然后将当前实例添加到父实例的`$children`中，最后将父实例赋值给当前实例的`$parent`，这样就在`Vue`实例之间建立了父子关系。从这段逻辑可以看出，对于抽象组件来说，在父组件的`$children`中，无法访问到该抽象组件；对于普通组件来说，它会跨越抽象组件，将其`$parent`属性指向第一个非抽象父组件，同时也可以在该父组件的`$children`中访问到该普通组件的实例。
+      在`initLifecycle`方法中，除了在当前实例上初始化一些实例属性外，还通过`$children`和`$parent`构建实例之间的父子关系，这里需要注意的是，对于抽象组件来说，它是不会出现在组件的父组件链中的，也就是说，在父实例的`$children`中，不会保存抽象组件，而是直接保存抽线组件的子组件，该子组件的`$parent`也是直接指向抽象组件的父组件，就像抽象组件不存在一样。
 
     * initEvents
 
@@ -147,7 +156,8 @@ Vue.prototype._init = function (options?: Object) {
       export function initEvents(vm: Component) {
         vm._events = Object.create(null)
         vm._hasHookEvent = false
-        // init parent attached events
+
+        // vm实例上的自定义事件
         const listeners = vm.$options._parentListeners
         if (listeners) {
           updateComponentListeners(vm, listeners)
@@ -155,7 +165,7 @@ Vue.prototype._init = function (options?: Object) {
       }
       ```
 
-      如上所示，`initEvents`方法主要用来处理事件相关的内容，需要注意的是，这里的事件属于自定义事件，是绑定到当前实例上的，而不是`DOM`相关的事件，在之后的章节中会详细介绍`Vue`是如何处理自定义事件和`DOM`事件的。
+      `initEvents`主要用来处理事件相关的内容，需要注意的是，这里的事件属于自定义事件，是绑定到当前实例上的，而不是`DOM`相关的事件。
 
     * initRender
 
@@ -165,10 +175,14 @@ Vue.prototype._init = function (options?: Object) {
         vm._vnode = null // the root of the child tree
         vm._staticTrees = null // v-once cached trees
         const options = vm.$options
+
+        // 1. 解析普通插槽
         const parentVnode = vm.$vnode = options._parentVnode // the placeholder node in parent tree
         const renderContext = parentVnode && parentVnode.context
         vm.$slots = resolveSlots(options._renderChildren, renderContext)
         vm.$scopedSlots = emptyObject
+
+        // 2. 添加创建VNode的方法
         // bind the createElement fn to this instance
         // so that we get proper render context inside it.
         // args order: tag, data, children, normalizationType, alwaysNormalize
@@ -178,6 +192,7 @@ Vue.prototype._init = function (options?: Object) {
         // user-written render functions.
         vm.$createElement = (a, b, c, d) => createElement(vm, a, b, c, d, true)
 
+        // 3. 在实例上定义响应式属性$attrs和$listeners
         // $attrs & $listeners are exposed for easier HOC creation.
         // they need to be reactive so that HOCs using them are always updated
         const parentData = parentVnode && parentVnode.data
@@ -197,13 +212,107 @@ Vue.prototype._init = function (options?: Object) {
       }
       ```
 
-      如上所示，`initRender`方法同样也是在当前实例上添加一些属性，该方法首先处理普通插槽`slot`相关的内容，然后在当前实例上添加了`vm._c`和`vm.$createElement`方法，这两个方法都与渲染相关，用来生成`VNode`，最后在当前实例上定义了响应式属性`$attrs`和`$listeners`，从而在父占位符节点更新的过程中，可以通知当前实例，`$attrs`和`$listeners`的变化。各功能的具体细节会在之后的章节中详细介绍。
+      `initRender`首先会调用`resolveSlots`方法对普通插槽进行解析，然后在当前实例上添加`_c`和`$createElement`方法，这两个方法都与渲染相关，用来创建`VNode`，最后在当前实例上定义响应式属性`$attrs`和`$listeners`，从而在组件的父占位符节点做`updateChildComponent`时，可以很方便的通知组件实例做更新操作。
 
-    剩余的三个方法`initInjections`、`initProvide`、`initState`，会在之后的章节中再详细介绍。
+    * initInjections & initProvide
 
-    经过以上的两个步骤，`_init`方法的主要逻辑(初始化`Vue`实例)已经完成了。
+      ```js
+      /* core/instance/inject.js */
+      export function initInjections(vm: Component) {
+        const result = resolveInject(vm.$options.inject, vm)
+        if (result) {
+          toggleObserving(false)
+          Object.keys(result).forEach(key => {
+            /* istanbul ignore else */
+            if (process.env.NODE_ENV !== 'production') {
+              // ...
+            } else {
+              defineReactive(vm, key, result[key])
+            }
+          })
+          toggleObserving(true)
+        }
+      }
 
-3. 检测选项中是否存在`el`属性，如果存在就直接调用`$mount`方法进行挂载
+      export function resolveInject(inject: any, vm: Component): ?Object {
+        // 如果配置中定义了inject选项，此时已经经过normalizeInject方法处理过
+        if (inject) {
+          // inject is :any because flow is not smart enough to figure out cached
+          const result = Object.create(null)
+          const keys = hasSymbol
+            ? Reflect.ownKeys(inject)
+            : Object.keys(inject)
+
+          for (let i = 0; i < keys.length; i++) {
+            const key = keys[i]
+            // #6574 in case the inject object is observed...
+            if (key === '__ob__') continue
+            const provideKey = inject[key].from
+            let source = vm
+            // 向上递归$parent，找到提供provideKey的祖先实例，然后将结果注入到当前实例中
+            while (source) {
+              if (source._provided && hasOwn(source._provided, provideKey)) {
+                result[key] = source._provided[provideKey]
+                break
+              }
+              source = source.$parent
+            }
+            if (!source) {
+              // 如果在祖先中找不到provideKey，但是定义了default，那么就使用默认值，否则提示警告
+              if ('default' in inject[key]) {
+                const provideDefault = inject[key].default
+                result[key] = typeof provideDefault === 'function'
+                  ? provideDefault.call(vm)
+                  : provideDefault
+              } else if (process.env.NODE_ENV !== 'production') {
+                warn(`Injection "${key}" not found`, vm)
+              }
+            }
+          }
+          return result
+        }
+      }
+      ```
+
+      ```js
+      /* core/instance/inject.js */
+      export function initProvide(vm: Component) {
+        const provide = vm.$options.provide
+        // 通过provide选项，向所有子孙后代注入依赖
+        if (provide) {
+          vm._provided = typeof provide === 'function'
+            ? provide.call(vm)
+            : provide
+        }
+      }
+      ```
+
+      可以看到，`provide`和`inject`选项需要搭配使用，在祖先中可以通过`provide`选项，为所有的后代注入依赖，不论组件嵌套的有多深，后代都可以通过`inject`选项，将祖先提供的数据注入到当前实例中。
+
+    * initState
+
+      ```js
+      /* core/instance/state.js */
+      export function initState(vm: Component) {
+        vm._watchers = []
+        const opts = vm.$options
+        if (opts.props) initProps(vm, opts.props)
+        if (opts.methods) initMethods(vm, opts.methods)
+        if (opts.data) {
+          initData(vm)
+        } else {
+          observe(vm._data = {}, true /* asRootData */)
+        }
+        if (opts.computed) initComputed(vm, opts.computed)
+        if (opts.watch && opts.watch !== nativeWatch) {
+          initWatch(vm, opts.watch)
+        }
+      }
+      ```
+
+      `initState`就是用来处理`props`、`methods`、`data`、`computed`、`watch`选项的，这些内容会在之后的章节中详细介绍。
+
+3. 挂载根节点
 
     ```js
     if (vm.$options.el) {
@@ -211,8 +320,8 @@ Vue.prototype._init = function (options?: Object) {
     }
     ```
 
-    如上所示，`_init`方法最后会判断用户是否传入了`el`选项，如果存在，就直接调用`$mount`方法进行挂载，其实这与手动调用`$mount`方法没有任何区别，只是`Vue`在初始化时帮我们做了这部分工作，`Vue`进行挂载的具体逻辑，会在之后的章节中详细介绍。
+    在`_init`方法最后，如果配置中存在`el`选项，就会调用`$mount`方法进行挂载。
 
 ## 总结
 
-本章简单的介绍了在`new Vue()`的过程中，`Vue`内部做了哪些初始化工作，其中主要是合并配置和执行`init`方法，在完成初始化工作后，如果选项中存在`el`属性，就会调用`$mount`方法进行挂载。
+在`new Vue()`创建实例的过程中，抛开最后`$mount`，其实就是创建一个`Vue`的实例，然后对其做一系列的初始化操作，比如在实例上添加各种属性、方法，处理各种配置选项，完成了实例的初始化工作后，就可以调用`$mount`，对该实例进行挂载。

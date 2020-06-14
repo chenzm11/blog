@@ -2,23 +2,13 @@
 
 ## 前言
 
-在调用`_init`方法初始化`Vue`实例的最后，如果选项中存在`el`属性，`Vue`就会直接调用`$mount`方法，进行挂载逻辑，代码如下所示：
+在前面的章节中，我们已经创建了一个`Vue`的实例，那么接下来，就可以通过`$mount`方法，将该实例挂载到页面中。
 
-```js
-/* core/instance/init.js */
-Vue.prototype._init = function (options?: Object) {
-  // ...
-  if (vm.$options.el) {
-    vm.$mount(vm.$options.el)
-  }
-}
-```
-
-那么接下来，就来看看对于运行时版本来说，`$mount`是如何进行挂载的。
+那么接下来，我们就来看看对于运行时版本来说，`$mount`是如何进行挂载的。
 
 ## $mount
 
-`$mount`方法其代码如下所示：
+对于`Web`平台来说，`$mount`方法是在引入`Vue`时添加到`Vue.prototype`上的，代码如下所示：
 
 ```js
 /* platforms/web/runtime/index.js */
@@ -31,7 +21,7 @@ Vue.prototype.$mount = function (
 }
 ```
 
-可以看到，在`$mount`方法中，首先将`el`选项转换成真实的`DOM`元素，然后调用`mountComponent`方法，其代码如下所示：
+可以看到，在`$mount`方法中，首先通过`query`方法找到`el`选项对应的`DOM`元素，然后调用`mountComponent`方法：
 
 ```js
 /* core/instance/lifecycle.js */
@@ -41,34 +31,17 @@ export function mountComponent(
   hydrating?: boolean
 ): Component {
   vm.$el = el
-  if (!vm.$options.render) {
-    vm.$options.render = createEmptyVNode
-    if (process.env.NODE_ENV !== 'production') {
-      /* istanbul ignore if */
-      if ((vm.$options.template && vm.$options.template.charAt(0) !== '#') ||
-        vm.$options.el || el) {
-        warn(
-          'You are using the runtime-only build of Vue where the template ' +
-          'compiler is not available. Either pre-compile the templates into ' +
-          'render functions, or use the compiler-included build.',
-          vm
-        )
-      } else {
-        warn(
-          'Failed to mount component: template or render function not defined.',
-          vm
-        )
-      }
-    }
-  }
+  // ...
   callHook(vm, 'beforeMount')
 
   let updateComponent
 
+  // 依赖收集 + 派发更新
   updateComponent = () => {
     vm._update(vm._render(), hydrating)
   }
 
+  // 渲染Watcher
   // we set this to vm._watcher inside the watcher's constructor
   // since the watcher's initial patch may call $forceUpdate (e.g. inside child
   // component's mounted hook), which relies on vm._watcher being already defined
@@ -81,6 +54,7 @@ export function mountComponent(
   }, true /* isRenderWatcher */)
   hydrating = false
 
+  // 根组件挂载完毕
   // manually mounted instance, call mounted on self
   // mounted is called for render-created child components in its inserted hook
   if (vm.$vnode == null) {
@@ -91,7 +65,13 @@ export function mountComponent(
 }
 ```
 
-可以看到，`mountComponent`方法首先会检测配置中是否存在`render`函数，如果不存在会提示相应的警告，然后调用`beforeMount`钩子函数，接着定义`updateComponent`函数，这个函数是整个`Vue`渲染和更新的核心方法，之后会详细介绍，然后创建渲染`Watcher`，需要注意的是，每个`Vue`实例，有且仅有一个渲染`Watcher`，通过渲染`Watcher`，`Vue`可以完成依赖收集和派发更新的整个过程，`Watcher`构造函数的代码如下所示：
+可以看到，`mountComponent`方法的逻辑很简单，主要就是创建一个渲染`Watcher`，对于每个`Vue`实例来说，有且仅有一个渲染`Watcher`与之对应，通过此渲染`Watcher`，`Vue`就可以完成依赖收集和派发更新的整个过程，而这里的关键方法就是`updateComponent`，它里面的`_render`方法就是用来创建`VNode`并收集依赖，`_update`方法就是将`VNode`渲染成真实的`DOM`，里面的具体细节之后会详细介绍，在`mountComponent`方法的最后，对于根组件来说，它会调用`mounted`钩子函数，通知应用已经完成挂载。
+
+那么接下来，我们就来看看在在创建渲染`Watcher`的过程中，`Vue`内部又做了哪些工作。
+
+## 渲染Watcher
+
+`Watcher`的代码如下所示：
 
 ```js
 /* core/observer/watcher.js */
@@ -104,6 +84,7 @@ export default class Watcher {
     isRenderWatcher?: boolean
   ) {
     this.vm = vm
+    // 渲染Watcher
     if (isRenderWatcher) {
       vm._watcher = this
     }
@@ -133,26 +114,16 @@ export default class Watcher {
     if (typeof expOrFn === 'function') {
       this.getter = expOrFn
     } else {
-      this.getter = parsePath(expOrFn)
-      if (!this.getter) {
-        this.getter = noop
-        process.env.NODE_ENV !== 'production' && warn(
-          `Failed watching path: "${expOrFn}" ` +
-          'Watcher only accepts simple dot-delimited paths. ' +
-          'For full control, use a function instead.',
-          vm
-        )
-      }
+      // ...
     }
+    // 在创建渲染Watcher时，会直接调用get方法
     this.value = this.lazy
       ? undefined
       : this.get()
   }
 
-  /**
-   * Evaluate the getter, and re-collect dependencies.
-   */
   get() {
+    // 将Dep.target设置为当前正在处理的Watcher实例
     pushTarget(this)
     let value
     const vm = this.vm
@@ -171,6 +142,7 @@ export default class Watcher {
         traverse(value)
       }
       popTarget()
+      // 清理多余的依赖
       this.cleanupDeps()
     }
     return value
@@ -178,7 +150,7 @@ export default class Watcher {
 }
 ```
 
-可以看到，在创建渲染`Watcher`的过程中，会将该`Watcher`实例保存在组件的`_watcher`属性中，然后在该`Watcher`实例上初始化一些属性，这里比较关键的就是将刚刚定义的`updateComponent`方法，赋值给渲染`Watcher`的`getter`属性，在创建渲染`Watcher`的最后，由于渲染`Watcher`的`lazy`为`false`，所以会直接调用`get`方法，在`get`方法中，会先后调用两个关键的方法`pushTarget`和`popTarget`，我们先来看看这两个方法的实现，其代码如下所示：
+可以看到，在创建渲染`Watcher`的过程中，首先会将刚刚的`updateComponent`方法赋值给`Watcher`实例的`getter`，然后直接调用`watcher.get`方法，在此方法中，会先后调用两个关键的方法`pushTarget`和`popTarget`，我们先来看看这两个方法的实现：
 
 ```js
 /* core/observer/dep.js */
@@ -196,31 +168,18 @@ export function popTarget() {
 }
 ```
 
-可以看到，`targetStack`就是一个`watcher`实例的栈，用来存储各种`watcher`实例，调用`pushTarget`时会将当前`watcher`实例入栈，并将其赋值给`Dep.target`，这样在其他地方就可以通过`Dep.target`访问到当前最顶层的`watcher`实例，调用`popTarget`时会将最顶层的`watcher`实例出栈，并将上一个`watcher`实例赋值给`Dep.target`，通过这两个操作，就可以保证`watcher`的执行顺序。
+可以看到，这里的`targetStack`就是模拟了一个栈结构，用来存储各种`watcher`的实例，调用`pushTarget`会先将当前`watcher`入栈，然后将其赋值给`Dep.target`，调用`popTarget`会先将最顶层的`watcher`出栈，然后将`Dep.target`指向下一个`watcher`，所以在这两个方法中间，就可以在任意位置通过`Dep.target`找到当前正在处理的`watcher`实例。
 
-回到上面的`get`方法，首先会调用`pushTarget`方法，将当前渲染`watcher`入栈并赋值给`Dep.target`，那么此时就可以在依赖收集的过程中，直接通过`Dep.target`访问到当前的渲染`watcher`。在设置好`Dep.target`后，就会调用`watcher.getter`方法，也就是上面定义的`updateComponent`方法，在该方法中，`Vue`首先会调用`_render`函数生成`VNode`，然后使用`_update`方法根据`VNode`渲染成真正的`DOM`并挂载到页面上，这部分内容会在之后的章节中详细介绍。在调用完`updateComponent`方法后，就会调用`popTarget`方法，恢复`Dep.target`的指向，最后调用`cleanupDeps`方法，进行清理工作，此时，渲染`Watcher`也已经收集到了所有它需要依赖的数据，这样整个初始渲染的工作就完成了，接着回到上面的`mountComponent`方法，如下：
+回到上面的`get`方法中，首先会调用`pushTarget`，将`Dep.target`指向当前的渲染`watcher`，然后就会调用`watcher.getter`方法，也就是上面传入的`updateComponent`方法，在该方法中，`Vue`首先会调用`_render`方法生成`VNode`，然后调用`_update`方法根据`VNode`渲染成真实的`DOM`，在调用完`updateComponent`方法后，就会调用`popTarget`方法，恢复`Dep.target`的指向，最后调用`cleanupDeps`方法，对多余的依赖进行清理。
 
-```js
-/* core/instance/lifecycle.js */
-export function mountComponent(
-  vm: Component,
-  el: ?Element,
-  hydrating?: boolean
-): Component {
-  // ...
+此时，初始化渲染`Watcher`的工作也已经完成了，并且在`_render`的过程中，渲染`Watcher`也已经收集到了所有它需要依赖的数据，所以当这些数据发生变化时，就会通知渲染`Watcher`做更新操作，这部分内容会在之后的章节中详细介绍。
 
-  // manually mounted instance, call mounted on self
-  // mounted is called for render-created child components in its inserted hook
-  if (vm.$vnode == null) {
-    vm._isMounted = true
-    callHook(vm, 'mounted')
-  }
-  return vm
-}
-```
+## 初始化的整体流程
 
-可以看到，这里的`vm.$vnode`表示当前`Vue`实例的父占位符`VNode`，而对于根组件来说，它就是最顶层的节点，所以此时`vm.$vnode`为空，就会将`_isMounted`设置为`true`，表明当前`Vue`实例已经挂载，然后调用`mounted`钩子函数。此时，整个`$mount`方法所作的初始渲染工作就完成了，并且由于在调用渲染函数的过程中，渲染`Watcher`已经收集到了所有它需要依赖的数据，所以当这些数据发生变化时，就会触发`Watcher`的`update`操作，最终又会调用`getter`也就是`updateComponent`方法，重新做依赖收集和更新的操作。
+从这几章节中，我们知道了根组件的初始化和挂载逻辑，而对于子组件来说也是类似的，它也会在父组件执行挂载的过程中进行初始化和挂载，具体的执行流程如下图所示：
+
+![lifecycle](./resource/lifecycle.png)
 
 ## 总结
 
-在`Vue`中，实例的初始化和挂载是两个独立的功能，可以通过调用`$mount`方法进行挂载，在此过程中会为每个`Vue`实例创建唯一的一个渲染`Watcher`，同时将`updateComponent`方法赋值给渲染`Watcher`的`getter`属性，在创建渲染`Watcher`的过程中，会直接调用一次`getter`方法，完成依赖收集和首次挂载的逻辑，当它所依赖的数据发生变化时，`Watcher`又会重新执行`getter`方法，重新收集依赖，并执行对比更新操作。
+在`Vue`中，组件的初始化和挂载是两个独立的模块，在调用`$mount`进行挂载的过程中，`Vue`会创建一个渲染`Watcher`，然后立即调用一次`watcher.get`，进而完成依赖收集和首次挂载的逻辑，当`Watcher`所依赖的数据发生变化时，又会通知此`Watcher`做更新操作，从而重新收集依赖和派发更新。
