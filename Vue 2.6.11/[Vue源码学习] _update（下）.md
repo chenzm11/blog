@@ -1,5 +1,7 @@
 # [Vue源码学习] _update（下）
 
+## 前言
+
 在上一章节中，我们可以通过`createElm`将`VNode`渲染成真实的`DOM`，那么在本章节中，我们就来看看对于相同节点，`Vue`是如何进行对比更新的。
 
 ## patchVnode
@@ -289,6 +291,8 @@ function createKeyToOldIdx(children, beginIdx, endIdx) {
 
 然后尝试通过`newStartVnode.key`从哈希表中找到对应的节点，如果没有找到，说明`newStartVnode`是一个全新的节点，就调用`createElm`方法创建真实的节点，如果找到的话，首先还是通过`sameVnode`判断这两个节点是否是相同节点，如果是相同节点，就调用`patchVnode`方法，进行对比更新操作，然后将该节点移动到`oldStartVnode`的前面，同时将`oldCh[idxInOld]`置为`undefined`，表示该节点已经处理过了，在遍历的时候需要跳过该节点；如果不是相同节点，就调用`createElm`方法创建真实的节点。处理完成后，将`newStartIdx`前进一位，同时更新`newStartVnode`。
 
+在上面的处理中，可以发现所有的移动操作都是基于`oldCh`，这是因为`patch`本来就是基于对上一次的`DOM`做修改操作。
+
 在双端比较的过程中，如果遇到`oldStartIdx`大于`oldEndIdx`或`newStartIdx`大于`newEndIdx`的时候，说明`oldCh`或`newCh`至少有一个已经遍历完，而没有遍历完的节点，在`oldCh`中表示多余的节点，需要删除，在`newCh`中表示新增的节点，需要添加，所以在方法的最后，还会执行这么一段逻辑，对剩余的节点做处理：
 
 ```js
@@ -455,4 +459,8 @@ export function updateChildComponent(
 
     调用`updateComponentListeners`方法更新事件。
 
-`updateChildComponent`方法除了更新组件实例上的属性外，最主要的作用就是在这些数据发生变化时，可以通知子组件需要做更新操作，将子组件的渲染`Watcher`添加到`queueWatcher`中，从而在更新完父组件后，子组件同样也会派发更新操作。
+`updateChildComponent`方法除了更新组件实例上的属性外，最主要的作用就是在这些数据发生变化时，可以通知子组件需要做更新操作，将子组件的渲染`Watcher`添加到`queueWatcher`中，从而在更新完父组件后，子组件同样也会派发更新操作，最终，整棵`DOM`就可以更新到最新的状态。
+
+## 总结
+
+在派发更新的时候，如果检测到新旧节点是相同的节点，`Vue`就会使用`patchVnode`方法，对`DOM`进行复用，然后只更新它的`data`和`children`，从而提高性能。

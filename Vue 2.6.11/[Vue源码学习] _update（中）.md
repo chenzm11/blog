@@ -276,10 +276,10 @@ function initComponent(vnode, insertedVnodeQueue) {
 }
 ```
 
-可以看到，在`initComponent`方法中，首先尝试从`vnode`中提取`pendingInsert`，它里面包含了需要执行`insert`钩子函数的节点，然后将其添加到当前的`insertedVnodeQueue`中，初次渲染时，通过这样层层的提取，所以最后在根节点`patch`时，就可以在调用这些节点的`insert`钩子函数；接着，将子组件的根`DOM`赋值给父占位符的`elm`；然后判断子该组件是否是可`patchable`的，如果可挂载，那么就需要调用`invokeCreateHooks`方法，一方面将父占位符上的`data`作用在`DOM`中，另一方面，也将当前组件`vnode`插入到`insertedVnodeQueue`中。
+可以看到，在`initComponent`方法中，首先尝试从`vnode`中提取`pendingInsert`，它里面包含了需要执行`insert`钩子函数的节点，然后将其添加到当前的`insertedVnodeQueue`中，初次渲染时，通过这样层层的提取，所以最后在根节点`patch`时，就可以在调用这些节点的`insert`钩子函数；接着，将子组件的根`DOM`赋值给父占位符的`elm`；然后判断子该组件是否是可`patchable`的，如果可挂载，那么就需要调用`invokeCreateHooks`方法，一方面将父占位符中的`data`作用在`DOM`上，另一方面，也将当前组件`vnode`插入到`insertedVnodeQueue`中。
 
-最终，通过`createComponent`方法，同样也渲染成真实的`DOM`。
+最终，通过`createComponent`方法，同样也可以将组件节点渲染成真实的`DOM`。
 
 ## 总结
 
-`createElm`会根据`vnode`的类型，使用不同的方法创建真实的节点，对于元素节点来说，它会递归创建子节点，所以在给定一个根`vnode`的情况下，`Vue`也能正确的生成整棵`DOM`树，而对于组节点来说，它会通过`createComponent`方法，执行`_init`钩子函数，从而创建子组件的实例，并进行挂载，最终，同样可以渲染成真实的`DOM`。
+`createElm`会根据`vnode`的类型，使用不同的方法创建真实的节点，对于元素节点来说，它会递归创建子节点，所以在给定一个根`vnode`的情况下，`Vue`也能正确的生成整棵`DOM`树，而对于组节点来说，它会通过`createComponent`方法，执行`init`钩子函数，从而创建子组件的实例，并进行挂载，最终，同样将组件节点渲染成真实的`DOM`。

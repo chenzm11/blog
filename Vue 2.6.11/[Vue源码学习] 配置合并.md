@@ -93,7 +93,7 @@ export function mergeOptions(
 
 可以看到，在`mergeOptions`方法中，首先调用`normalize`方法规范化`props`、`inject`、`directives`选项，将用户传入的数据处理成规范的格式；然后递归地调用`mergeOptions`方法，将`extends`、`mixins`选项中的配置合并到`parent`中，相当于对组件做了扩展，同时从这里可以看出，`extends`和`mixins`选项的处理逻辑是相同的，`mixins`相当于包含多次`extends`；在完成了前两步的初始化工作后，接下来就开始执行真正的配置合并的逻辑。
 
-首先遍历传入的配置对象，根据不同的选项从`strats`中取出对应的合并策略函数，然后将`parent`上的配置和`child`上的配置通过策略函数进行合并，最后就可以得到此选项合并后的结果了。接下来就来看看常见的选项是如何进行合并的。
+在合并的时候，首先遍历传入的配置对象，根据不同的选项从`strats`中取出对应的合并策略函数，然后将`parent`中的配置和`child`中的配置通过策略函数进行合并，最后就可以得到此选项合并后的结果了。接下来就来看看常见的选项是如何进行合并的。
 
 ### lifecycle
 
@@ -229,7 +229,7 @@ export function mergeDataOrFn(
 }
 ```
 
-可以看到，对于非组件的配置合并，该策略函数会返回一个新的函数`mergedInstanceDataFn`，它会在`initState`的过程中执行。执行时，首先从`parent`和`child`中取到各自的数据，然后调用`mergeData`方法合并这两项数据：
+可以看到，对于非组件的配置合并，调用`data`选项的策略函数会返回一个新的函数`mergedInstanceDataFn`，它会在`initState`的过程中执行。执行时，首先从`parent`和`child`中取到各自的数据，然后调用`mergeData`方法合并这两项数据：
 
 ```js
 /* core/util/options.js */
@@ -289,7 +289,7 @@ strats.computed = function (
 }
 ```
 
-可以看到，这些合并策略很简单，就是简单的浅合并`parentVal`和`childVal`，并且`childVal`中的值可以覆盖`parentVal`中的值。
+可以看到，这些合并策略很简单，就是浅合并`parentVal`和`childVal`，并且`childVal`中的值可以覆盖`parentVal`中的值。
 
 ### 默认策略
 
@@ -304,7 +304,7 @@ const defaultStrat = function (parentVal: any, childVal: any): any {
 }
 ```
 
-默认策略就是在`child`中定义了选项，就直接取`child`中的值，否则，就取`parent`中的值。
+默认策略就是如果在`child`中定义了选项，就直接取`child`中的值，否则，就取`parent`中的值。
 
 在各种选项经过对应的策略函数处理后，将最终的合并结果赋值给`vm.$options`，这样就完成了非组件的配置合并。
 
@@ -445,11 +445,11 @@ export function initInternalComponent(vm: Component, options: InternalComponentO
 }
 ```
 
-在`initInternalComponent`方法中，首先以`Sub.options`为原型创建一个实例，然后将各种与当前实例相关的`propsData`、`listeners`、`children`等属性添加到该实例上，可以看到，由于此时没有做`mergeOptions`操作，所以组件的配置合并速度是很快的。
+在`initInternalComponent`方法中，首先以`Sub.options`为原型创建一个实例，然后将各种与当前实例相关的`propsData`、`listeners`、`children`等属性添加到该实例上，可以看到，在创建子组件实例时，由于没有做`mergeOptions`操作，所以配置合并的速度是很快的。
 
 ## resolveConstructorOptions
 
-在前两的两小节中，我们已经知道`Vue`是如何合并配置的了，其实在它们的内部，都会执行`resolveConstructorOptions`方法，用来检查构造器上的`options`是否需要更新，代码如下所示：
+在前面的两小节中，我们已经知道`Vue`是如何合并配置的了，其实在它们的内部，都会执行`resolveConstructorOptions`方法，用来检查构造器上的`options`是否需要更新，代码如下所示：
 
 ```js
 /* core/instance/init.js */
@@ -479,8 +479,8 @@ export function resolveConstructorOptions(Ctor: Class<Component>) {
 }
 ```
 
-在`resolveConstructorOptions`方法中，如果检测到子构造器中的`superOptions`与父构造器的`options`不相同，则说明在创建完子构造器后，父构造器的配置选项进行过更新，所以需要调用`mergeOptions`方法，重新生成子构造器上的`options`选项，所以在创建实例之前，通过调用`resolveConstructorOptions`方法，就可以保证在创建实例时，构造器上的`options`选项是最新的了。
+在`resolveConstructorOptions`方法中，如果检测到子构造器中的`superOptions`与父构造器的`options`不相同，则说明在创建完子构造器后，父构造器的配置选项进行过更新，所以需要调用`mergeOptions`方法，重新创建子构造器的`options`，所以在创建实例之前，通过调用`resolveConstructorOptions`方法，就可以保证在创建实例时，构造器上的`options`选项是最新的了。
 
 ## 总结
 
-在`Vue`中，每个实例的`$options`不仅仅来自于我们编写的配置，它还会将组件构造器上的配置，通过不同的策略函数，进行合并，同时，在创建子组件实例时，还会将父占位符中的部分数据进行合并，从而得到最终的配置。
+在`Vue`中，每个实例的`$options`不仅仅来自于我们编写的配置，它还会用不同的策略函数，与组件构造器上的配置进行合并，同时，子组件只会在第一次构造组件构造器时执行`mergeOptions`操作，之后就可以高效的创建子组件的实例了。

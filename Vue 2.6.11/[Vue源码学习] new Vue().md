@@ -147,7 +147,7 @@ Vue.prototype._init = function (options?: Object) {
       }
       ```
 
-      在`initLifecycle`方法中，除了在当前实例上初始化一些实例属性外，还通过`$children`和`$parent`构建实例之间的父子关系，这里需要注意的是，对于抽象组件来说，它是不会出现在组件的父组件链中的，也就是说，在父实例的`$children`中，不会保存抽象组件，而是直接保存抽线组件的子组件，该子组件的`$parent`也是直接指向抽象组件的父组件，就像抽象组件不存在一样。
+      在`initLifecycle`方法中，除了在当前实例上初始化一些实例属性外，还通过`$children`和`$parent`构建实例之间的父子关系，这里需要注意的是，对于抽象组件来说，它是不会出现在组件的父组件链中的，也就是说，在父实例的`$children`中，会越过抽象组件，直接保存抽象组件的子组件，该子组件的`$parent`也是直接指向抽象组件的父组件，就像抽象组件不存在一样。
 
     * initEvents
 
@@ -157,7 +157,7 @@ Vue.prototype._init = function (options?: Object) {
         vm._events = Object.create(null)
         vm._hasHookEvent = false
 
-        // vm实例上的自定义事件
+        // 绑定到vm实例上的事件
         const listeners = vm.$options._parentListeners
         if (listeners) {
           updateComponentListeners(vm, listeners)
@@ -235,7 +235,7 @@ Vue.prototype._init = function (options?: Object) {
       }
 
       export function resolveInject(inject: any, vm: Component): ?Object {
-        // 如果配置中定义了inject选项，此时已经经过normalizeInject方法处理过
+        // 配置中定义的inject选项，此时已经经过normalizeInject处理
         if (inject) {
           // inject is :any because flow is not smart enough to figure out cached
           const result = Object.create(null)
@@ -324,4 +324,4 @@ Vue.prototype._init = function (options?: Object) {
 
 ## 总结
 
-在`new Vue()`创建实例的过程中，抛开最后`$mount`，其实就是创建一个`Vue`的实例，然后对其做一系列的初始化操作，比如在实例上添加各种属性、方法，处理各种配置选项，完成了实例的初始化工作后，就可以调用`$mount`，对该实例进行挂载。
+在`new Vue()`创建实例的过程中，抛开最后`$mount`，其实就是创建一个`Vue`的实例，然后对其做一系列的初始化操作，比如在实例上添加各种属性、方法，处理各种配置选项，完成实例的初始化工作后，就可以调用`$mount`，对该实例进行挂载。

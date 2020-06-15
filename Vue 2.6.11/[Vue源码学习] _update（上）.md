@@ -199,7 +199,7 @@ function patch(oldVnode, vnode, hydrating, removeOnly) {
     }
     ```
 
-    当回到组件的父占位符节点时，又会调用`initComponent`方法，将`pendingInsert`中的节点提取到`insertedVnodeQueue`中：
+    当程序回到组件的父占位符节点时，又会调用`initComponent`方法，将`pendingInsert`中的节点提取到`insertedVnodeQueue`中：
 
     ```js
     function initComponent(vnode, insertedVnodeQueue) {
@@ -210,6 +210,8 @@ function patch(oldVnode, vnode, hydrating, removeOnly) {
       // ...
     }
     ```
+
+    经过这样一层层的提取，就可以在根节点的`insertedVnodeQueue`中，统一执行`insert`钩子函数。
 
 3. 组件的对比更新：如果新旧节点都存在，并且通过`sameVnode`检测到它们是相同的节点，那么就不需要重新创建一个全新的`DOM`了，而是复用此`DOM`，然后通过对比`vnode`和`oldVnode`中的`data`和`children`，做更新操作：
 
@@ -281,4 +283,4 @@ export function createPatchFunction(backend) {
 
 ## 总结
 
-在`patch`方法中，`Vue`会根据新旧`vnode`的状态，执行不同的操作，同时在创建、更新、删除节点的时候，执行相应的`VNode`钩子函数，同时也会根据`modules`钩子函数处理`vnode.data`中的数据，将其作用与`DOM`上。
+在`patch`方法中，`Vue`会根据新旧`vnode`的状态，执行不同的操作，同时在创建、更新、删除节点的时候，执行相应的`VNode`钩子函数，同时也会根据`modules`钩子函数处理`vnode.data`中的数据，将其作用在`DOM`上。
