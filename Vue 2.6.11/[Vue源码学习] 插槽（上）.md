@@ -200,7 +200,7 @@ function closeElement(element) {
 }
 ```
 
-可以看到，当`v-slot`指令在`<template>`标签上时，`template`对应的`AST`节点会具有`slotScope`属性，那么就会在父`AST`节点，也就是组件`AST`节点的`scopedSlots`对象上，将当前`template`节点作为插槽添加进去。当所有的子节点都完成闭合操作后，就会执行父节点的闭合操作，由于插槽在本质上不属于子节点，而且在处理子节点的过程中，已经将插槽添加到父节点的`scopedSlots`中，所以在父节点闭合时会执行`element.children.filter(c => !(c: any).slotScope)`，将所有的插槽从父节点的`children`中移除，这样一来，插槽就只能通过父节点的`scopedSlots`属性进行访问了。
+可以看到，当`v-slot`指令在`<template>`标签上时，`template`对应的`AST`节点会具有`slotScope`属性，那么就会在父`AST`节点，也就是组件`AST`节点的`scopedSlots`对象上，将当前`template`节点作为插槽添加进去。当所有的子节点都完成闭合操作后，就会执行父节点的闭合操作，由于插槽在本质上不属于子节点，而且在处理子节点的过程中，已经将插槽添加到父节点的`scopedSlots`中，所以在父节点闭合时会执行`element.children.filter(c => !(c: any).slotScope)`，将所有的作用域插槽从父节点的`children`中移除，这样一来，作用域插槽就只能通过父节点的`scopedSlots`属性进行访问了。
 
 在将模板转换成`AST`节点后，就会进行编译的`generate`阶段，用来将`AST`节点转换成最终的代码，在这个过程中，会调用`genData`方法，用来处理`AST`上的数据，当检测到`AST`上存在`scopedSlots`属性时，就会调用`genScopedSlots`方法来处理插槽，代码如下所示：
 
@@ -286,6 +286,8 @@ function anonymous() {
   }
 }
 ```
+
+上面的`proxy`属性表示虽然这里是作用域插槽的形式，但是在运行时需要将其代理到`$slot`中。
 
 `v-slot`指令是在父组件中使用的，接下来就来看看在子组件中，`Vue`是如何处理`<slot>`标签的。
 
